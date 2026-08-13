@@ -1,12 +1,12 @@
 import json
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import storage
 from storage import init_db
-from auth import SUPABASE_URL, supabase
+from auth import SUPABASE_URL, current_user, supabase
 
 class Credentials(BaseModel):
     email: Optional[str] = None
@@ -28,6 +28,13 @@ app = FastAPI()
 
 init_db()
 print(f"Server running and connected to Supabase at {SUPABASE_URL}")
+
+@app.exception_handler(HTTPException)
+async def json_error(request, exc: HTTPException):
+    """Keep every error body in the same {"error": "..."} shape."""
+    detail = exc.detail
+    content = detail if isinstance(detail, dict) else {"error": detail}
+    return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
 @app.get("/", summary="Get API information")
 async def read_root():
@@ -84,35 +91,25 @@ async def login(credentials: Credentials):
 async def public_info():
     return {"message": "Welcome stranger! This info is public."}
 
+# One guard — current_user in auth.py — stands at every locked door. Adding a
+# protected route means adding the dependency, never new auth code.
+
 @app.get("/protected/profile", tags=["protected"], summary="Private profile data")
-async def protected_profile(request: Request):
-    header = request.headers.get("Authorization", "")
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Access token required"}
-        )
-
-    # Ask Supabase whether the token is real. This is a network call, so the
-    # answer is trustworthy — a tampered or expired token fails here.
-    try:
-        response = supabase.auth.get_user(token)
-        user = response.user if response else None
-    except Exception:
-        user = None
-
-    if user is None:
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Invalid or expired token"}
-        )
-
+async def protected_profile(user=Depends(current_user)):
     return {
         "id": user.id,
         "email": user.email,
         "created_at": str(user.created_at),
     }
+
+@app.get("/protected/dashboard", tags=["protected"], summary="Another protected route, same guard")
+async def protected_dashboard(user=Depends(current_user)):
+    return {"message": f"Welcome back, {user.email}", "widgets": ["tasks", "profile"]}
+
+@app.post("/auth/logout", status_code=204, tags=["auth"], summary="End the user's session")
+async def logout(user=Depends(current_user)):
+    supabase.auth.sign_out()
+    return Response(status_code=204)
 
 # --- Tasks (A1-A3) ---------------------------------------------------------
 
