@@ -2,8 +2,8 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-import repository
-from repository import init_db
+import storage
+from storage import init_db
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
@@ -36,7 +36,7 @@ def row_to_task(row):
 
 @app.get("/tasks", summary="List all tasks")
 async def get_tasks():
-    return [row_to_task(row) for row in repository.list_tasks()]
+    return [row_to_task(row) for row in storage.list_tasks()]
 
 @app.post("/tasks", status_code=201, summary="Create a new task")
 async def create_task(task_in: TaskCreate):
@@ -45,11 +45,11 @@ async def create_task(task_in: TaskCreate):
             status_code=400,
             content={"error": "Title is required"}
         )
-    return row_to_task(repository.create_task(task_in.title))
+    return row_to_task(storage.create_task(task_in.title))
 
 @app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
-    row = repository.get_task(id)
+    row = storage.get_task(id)
     if row is None:
         return JSONResponse(
             status_code=404,
@@ -66,7 +66,7 @@ async def update_task(id: int, task_in: TaskUpdate):
             content={"error": "Title cannot be empty"}
         )
 
-    current = repository.get_task(id)
+    current = storage.get_task(id)
     if current is None:
         return JSONResponse(
             status_code=404,
@@ -76,12 +76,12 @@ async def update_task(id: int, task_in: TaskUpdate):
     _, current_title, current_done = current
     title = task_in.title if task_in.title is not None else current_title
     done = task_in.done if task_in.done is not None else current_done
-    return row_to_task(repository.update_task(id, title, done))
+    return row_to_task(storage.update_task(id, title, done))
 
 
 @app.delete("/tasks/{id}", status_code=204, summary="Delete a specific task")
 async def delete_task(id: int):
-    if not repository.delete_task(id):
+    if not storage.delete_task(id):
         return JSONResponse(
             status_code=404,
             content={"error": f"Task {id} not found"}

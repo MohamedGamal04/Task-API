@@ -125,7 +125,7 @@ $ docker compose exec db psql -U postgres -d tasks -c "\dt" -c "SELECT * FROM ta
 | File | What it does |
 |---|---|
 | `main.py` | FastAPI routes and validation — unchanged in shape since A1 |
-| `repository.py` | The one module that talks to Postgres; every query is parameterized (`%s`) |
+| `storage.py` | The one module that talks to Postgres; every query is parameterized (`%s`) |
 | `Dockerfile` | Builds the app image |
 | `compose.yaml` | Starts `api` + `db` together, with a volume and a database healthcheck |
 | `database.py`, `sql_playground.py` | The A2 SQLite storage layer and its by-hand SQL, kept for reference |
