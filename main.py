@@ -24,7 +24,15 @@ class Task(BaseModel):
     title: str
     done: bool
 
-app = FastAPI()
+app = FastAPI(
+    title="Task API with Supabase Auth",
+    description=(
+        "CRUD task API backed by Postgres, with Supabase Auth in front of it.\n\n"
+        "Log in via **POST /auth/login**, copy the `access_token`, then click "
+        "**Authorize** above and paste it to call the locked routes."
+    ),
+    version="4.0",
+)
 
 init_db()
 print(f"Server running and connected to Supabase at {SUPABASE_URL}")
