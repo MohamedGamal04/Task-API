@@ -130,6 +130,33 @@ $ docker compose exec db psql -U postgres -d tasks -c "\dt" -c "SELECT * FROM ta
 | `compose.yaml` | Starts `api` + `db` together, with a volume and a database healthcheck |
 | `database.py`, `sql_playground.py` | The A2 SQLite storage layer and its by-hand SQL, kept for reference |
 
+## SQLite → Postgres: what actually changed
+
+`database.py` (A2) and `storage.py` (A3) do the same job for different engines. Both files are in the
+repo so the swap is visible:
+
+| | `database.py` (A2, SQLite) | `storage.py` (A3, Postgres) |
+|---|---|---|
+| Engine | a file on disk, `tasks.db` | a server running in a container |
+| Driver | `sqlite3` (Python standard library) | `psycopg` |
+| Where it connects | hardcoded filename | `DATABASE_URL` read from `.env` |
+| Placeholder | `?` | `%s` |
+| Auto id | `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` |
+| Booleans | no boolean type — `done` stored as `0`/`1` and cast on read | real `BOOLEAN`, returns `True`/`False` |
+| Id of a new row | `cursor.lastrowid` after the insert | `INSERT ... RETURNING id, title, done` |
+| Transactions | manual `conn.commit()` and `conn.close()` | the `with` block commits and closes |
+| Scope | connection + table creation only; the routes wrote their own SQL | all of CRUD lives here |
+
+That last row is the structural change. In A2 the SQL was scattered through the route bodies in
+`main.py`; A3 keeps every database line in one module, so `main.py` only handles HTTP — validation and
+status codes. Swapping SQLite for Postgres therefore touched zero route logic.
+
+**Why that matters:** the same requests returned the same responses with the same status codes against
+all three storage engines — an in-memory list, a SQLite file, and a Postgres server. If behaviour
+visible to a client never changed while the engine underneath changed twice, then storage really is
+"just an implementation detail": the API is the promise, and the database is only where the promise
+happens to be kept.
+
 ## Previous assignment — A2 (SQLite)
 
 Why SQLite was chosen back then: one file, zero setup, no server to run — and it already gave
