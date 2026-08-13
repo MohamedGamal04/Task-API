@@ -16,12 +16,6 @@ class Task(BaseModel):
     title: str
     done: bool
 
-tasks = [
-    Task(id=1, title="Buy milk", done=False),
-    Task(id=2, title="Walk the dog", done=False),
-    Task(id=3, title="Finish assignment", done=True),
-]
-
 app = FastAPI()
 
 init_db()
@@ -77,30 +71,42 @@ async def get_task(id: int):
 
 @app.put("/tasks/{id}", summary="Update a specific task")
 async def update_task(id: int, task_in: TaskUpdate):
-    for task in tasks:
-        if task.id == id:
-            if task_in.title is not None:
-                if not task_in.title.strip():
-                    return JSONResponse(
-                        status_code=400,
-                        content={"error": "Title cannot be empty"}
-                    )
-                task.title = task_in.title
-            if task_in.done is not None:
-                task.done = task_in.done
-            return task
-    return JSONResponse(
-        status_code=404,
-        content={"error": f"Task {id} not found"}
+    if task_in.title is not None and not task_in.title.strip():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Title cannot be empty"}
+        )
+
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
+    if row is None:
+        conn.close()
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {id} not found"}
+        )
+
+    title = task_in.title if task_in.title is not None else row["title"]
+    done = task_in.done if task_in.done is not None else bool(row["done"])
+    conn.execute(
+        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+        (title, int(done), id)
     )
-    
+    conn.commit()
+    conn.close()
+    return Task(id=id, title=title, done=done)
+
+
 @app.delete("/tasks/{id}", status_code=204, summary="Delete a specific task")
 async def delete_task(id: int):
-    for task in tasks:
-        if task.id == id:
-            tasks.remove(task)
-            return Response(status_code=204)
-    return JSONResponse(
-        status_code=404,
-        content={"error": f"Task {id} not found"}
-    )
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (id,))
+    conn.commit()
+    deleted = cursor.rowcount
+    conn.close()
+    if deleted == 0:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {id} not found"}
+        )
+    return Response(status_code=204)
