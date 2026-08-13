@@ -26,6 +26,21 @@ That is the one command you need. `tasks.db` is created automatically on first r
 table is created if missing, and three example tasks are seeded **only when the table is empty** —
 restarting never duplicates them.
 
+## Postgres in Docker (W1 · A3, in progress)
+
+Start a real Postgres server in one command — nothing installed on your machine:
+
+```bash
+docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks \
+  -p 5432:5432 -v taskdata:/var/lib/postgresql -d postgres
+```
+
+Open a SQL prompt inside it: `docker exec -it taskdb psql -U postgres -d tasks`
+
+> The assignment mounts the volume at `/var/lib/postgresql/data`. The `postgres:18+`
+> images expect a single mount at `/var/lib/postgresql` instead, which is what the
+> command above uses.
+
 ## Endpoints
 
 | Method | Path | Description | Status codes |
