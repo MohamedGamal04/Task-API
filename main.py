@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 import storage
 from storage import init_db
+from auth import SUPABASE_URL
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
@@ -20,6 +21,7 @@ class Task(BaseModel):
 app = FastAPI()
 
 init_db()
+print(f"Server running and connected to Supabase at {SUPABASE_URL}")
 
 @app.get("/", summary="Get API information")
 async def read_root():

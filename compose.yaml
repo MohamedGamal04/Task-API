@@ -9,6 +9,7 @@ services:
         condition: service_healthy
   db:
     image: postgres
+    ports: ["5432:5432"]   # so you can also run the app outside Docker
     environment:
       POSTGRES_PASSWORD: dev
       POSTGRES_DB: tasks
