@@ -52,9 +52,15 @@ async def create_task(task_in: TaskCreate):
             status_code=400,
             content={"error": "Title is required"}
         )
-    task = Task(id=len(tasks) + 1, title=task_in.title, done=False)
-    tasks.append(task)
-    return task
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        (task_in.title, 0)
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    conn.close()
+    return Task(id=new_id, title=task_in.title, done=False)
 
 @app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
