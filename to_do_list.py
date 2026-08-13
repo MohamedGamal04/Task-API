@@ -3,13 +3,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
+class TaskCreate(BaseModel):
+    title: Optional[str] = None
+
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     done: Optional[bool] = None
 
-class TaskCreate(BaseModel):
-    title: Optional[str] = None
-    
 class Task(BaseModel):
     id: int
     title: str
@@ -23,19 +23,19 @@ tasks = [
 
 app = FastAPI()
 
-@app.get("/")
+@app.get("/", summary="Get API information")
 async def read_root():
     return { "name": "Task API", "version": "1.0", "endpoints": ["/tasks"] }
 
-@app.get("/health")
+@app.get("/health", summary="Check API health")
 async def read_health():
     return { "status": "ok" }
 
-@app.get("/tasks")
+@app.get("/tasks", summary="List all tasks")
 async def get_tasks():
     return tasks
 
-@app.post("/tasks", status_code=201)
+@app.post("/tasks", status_code=201, summary="Create a new task")
 async def create_task(task_in: TaskCreate):
     if not task_in.title or not task_in.title.strip():
         return JSONResponse(
@@ -46,7 +46,7 @@ async def create_task(task_in: TaskCreate):
     tasks.append(task)
     return task
 
-@app.get("/tasks/{id}")
+@app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
     for task in tasks:
         if task.id == id:
@@ -56,11 +56,8 @@ async def get_task(id: int):
         content={"error": f"Task {id} not found"}
     )
 
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    done: Optional[bool] = None
 
-@app.put("/tasks/{id}")
+@app.put("/tasks/{id}", summary="Update a specific task")
 async def update_task(id: int, task_in: TaskUpdate):
     for task in tasks:
         if task.id == id:
@@ -79,7 +76,7 @@ async def update_task(id: int, task_in: TaskUpdate):
         content={"error": f"Task {id} not found"}
     )
     
-@app.delete("/tasks/{id}", status_code=204)
+@app.delete("/tasks/{id}", status_code=204, summary="Delete a specific task")
 async def delete_task(id: int):
     for task in tasks:
         if task.id == id:
