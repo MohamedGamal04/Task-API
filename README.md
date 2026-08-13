@@ -50,7 +50,7 @@ content-type: application/json
 
 Full CRUD cycle tested via `/docs` — create, list, update, and delete a task, all through the "Try it out" interface.
 
-![Swagger UI screenshot](./swagger-screenshot.png)
+![Swagger UI screenshot](<img width="1453" height="592" alt="image" src="https://github.com/user-attachments/assets/d4645e47-68b6-481c-aa19-45bee42469d9" />)
 
 ## Notes
 
