@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import Optional
 import repository
 from repository import init_db
-from database import get_connection  # A2 SQLite reads, swapped out in Stage 2
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
@@ -46,15 +45,7 @@ async def create_task(task_in: TaskCreate):
             status_code=400,
             content={"error": "Title is required"}
         )
-    conn = get_connection()
-    cursor = conn.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?)",
-        (task_in.title, 0)
-    )
-    conn.commit()
-    new_id = cursor.lastrowid
-    conn.close()
-    return Task(id=new_id, title=task_in.title, done=False)
+    return row_to_task(repository.create_task(task_in.title))
 
 @app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
@@ -75,34 +66,22 @@ async def update_task(id: int, task_in: TaskUpdate):
             content={"error": "Title cannot be empty"}
         )
 
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
-    if row is None:
-        conn.close()
+    current = repository.get_task(id)
+    if current is None:
         return JSONResponse(
             status_code=404,
             content={"error": f"Task {id} not found"}
         )
 
-    title = task_in.title if task_in.title is not None else row["title"]
-    done = task_in.done if task_in.done is not None else bool(row["done"])
-    conn.execute(
-        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-        (title, int(done), id)
-    )
-    conn.commit()
-    conn.close()
-    return Task(id=id, title=title, done=done)
+    _, current_title, current_done = current
+    title = task_in.title if task_in.title is not None else current_title
+    done = task_in.done if task_in.done is not None else current_done
+    return row_to_task(repository.update_task(id, title, done))
 
 
 @app.delete("/tasks/{id}", status_code=204, summary="Delete a specific task")
 async def delete_task(id: int):
-    conn = get_connection()
-    cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (id,))
-    conn.commit()
-    deleted = cursor.rowcount
-    conn.close()
-    if deleted == 0:
+    if not repository.delete_task(id):
         return JSONResponse(
             status_code=404,
             content={"error": f"Task {id} not found"}
