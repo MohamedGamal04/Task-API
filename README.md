@@ -174,6 +174,14 @@ Open <http://localhost:3000/docs>: the protected routes show a **lock icon**. Cl
 paste the `access_token` from `/auth/login`, and use **Try it out** on `GET /protected/profile` —
 no curl needed. FastAPI's `HTTPBearer` scheme is what puts the padlock there.
 
+![Swagger UI with the Authorize button](docs/swagger_1.jpg)
+
+The padlock appears on exactly the three routes behind the guard — `/auth/logout`,
+`/protected/profile` and `/protected/dashboard` — while `/auth/signup`, `/auth/login` and
+`/public/info` stay open:
+
+![Padlocks on the protected routes](docs/swagger_2.jpg)
+
 ### Supabase project setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
