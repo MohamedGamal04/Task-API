@@ -1,8 +1,9 @@
-# Task API — FlyRank Backend Track (A1 · A2 · A3)
+# Task API — FlyRank Backend Track (A1 · A2 · A3 · A4)
 
-A small CRUD API for managing a to-do list, built with **Python** and **FastAPI**. Supports creating,
-reading, updating, and deleting tasks. The storage underneath has been swapped three times while the
-API on top stayed identical:
+A small CRUD API for managing a to-do list, built with **Python** and **FastAPI**, now with
+**Supabase Auth** in front of it: sign up, log in, log out, and routes that answer only for
+logged-in users. The storage underneath has been swapped three times while the API on top stayed
+identical:
 
 | Assignment | Where tasks live | What runs it |
 |---|---|---|
@@ -35,6 +36,9 @@ All config comes from the environment — see `.env.example` for the keys:
 | Variable | What it is |
 |---|---|
 | `DATABASE_URL` | Postgres connection string, e.g. `postgres://postgres:dev@db:5432/tasks` |
+| `SUPABASE_URL` | Your Supabase Project URL (Dashboard → Project Settings → API) |
+| `SUPABASE_KEY` | Your Supabase **anon** key — never the `service_role` key |
+| `PORT` | Port the API listens on (default `3000`) |
 
 `.env` is git-ignored and holds the real values; `.env.example` is the committed template.
 No credentials are hardcoded anywhere in the code.
@@ -56,6 +60,17 @@ Open a SQL prompt inside the container: `docker exec -it taskdb psql -U postgres
 > single mount at `/var/lib/postgresql` instead, which is what the commands above use.
 
 ## Endpoints
+
+| Method | Path | Auth | Description | Status codes |
+|--------|------|------|-------------|--------------|
+| POST | `/auth/signup` | none | Create a user account | 201, 400 missing email/password |
+| POST | `/auth/login` | none | Log in, returns an access token | 200, 400 missing input, 401 bad credentials |
+| POST | `/auth/logout` | **Bearer** | End the session | 204, 401 missing/invalid token |
+| GET | `/protected/profile` | **Bearer** | Private profile data | 200, 401 missing/invalid token |
+| GET | `/protected/dashboard` | **Bearer** | Second protected route, same guard | 200, 401 missing/invalid token |
+| GET | `/public/info` | none | Public info | 200 |
+
+Task routes (from A1–A3), all currently open:
 
 | Method | Path | Description | Status codes |
 |--------|------|-------------|--------------|
@@ -98,6 +113,75 @@ content-type: application/json
 {"id":4,"title":"Buy milk","done":false}
 ```
 
+## Auth: how it works (A4)
+
+Authentication is a trust triangle — the client, this API, and **Supabase** as the Identity Provider.
+Supabase stores the accounts, hashes the passwords, and signs the tokens. This API never stores a
+password and never hashes anything itself; it forwards credentials to Supabase and **verifies the
+tokens** Supabase hands back.
+
+1. Client sends email + password to `POST /auth/signup` or `POST /auth/login`.
+2. Supabase checks them and returns a **JWT** (the `access_token`) plus a refresh token.
+3. Client calls a protected route with `Authorization: Bearer <token>`.
+4. The guard asks Supabase whether the token is real — `supabase.auth.get_user(token)`, a network
+   call — and only then does the route body run.
+
+The guard lives in `auth.py` as `current_user`, a FastAPI **dependency**. Protecting a new route
+means adding `Depends(current_user)` — no auth code is ever copy-pasted:
+
+```python
+@app.get("/protected/dashboard")
+async def protected_dashboard(user=Depends(current_user)):
+    return {"message": f"Welcome back, {user.email}"}
+```
+
+Errors it returns: `401 {"error": "Access token required"}` when the header is missing or malformed,
+`401 {"error": "Invalid or expired token"}` when Supabase rejects the token.
+
+### The full flow with curl
+
+```bash
+# 1. sign up
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"password123"}'          # -> 201
+
+# 2. log in and keep the token
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"password123"}' \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+# 3. the locked door opens
+curl -i http://localhost:3000/protected/profile -H "Authorization: Bearer $TOKEN"
+# -> 200 {"id":"58a0c788-...","email":"you@example.com","created_at":"..."}
+
+# 4. tamper with the token -> the guard refuses
+curl -i http://localhost:3000/protected/profile -H "Authorization: Bearer ${TOKEN}tampered"
+# -> 401 {"error":"Invalid or expired token"}
+
+# 5. no token at all
+curl -i http://localhost:3000/protected/profile          # -> 401 {"error":"Access token required"}
+```
+
+> Tampering note: change a character in the **middle** of the token. Replacing the very last
+> character of the signature can decode to the same bytes (it carries only two significant bits), so
+> the token is not actually altered and verification still succeeds.
+
+### Swagger UI
+
+Open <http://localhost:3000/docs>: the protected routes show a **lock icon**. Click **Authorize**,
+paste the `access_token` from `/auth/login`, and use **Try it out** on `GET /protected/profile` —
+no curl needed. FastAPI's `HTTPBearer` scheme is what puts the padlock there.
+
+### Supabase project setup
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. **Project Settings → API**: copy the Project URL and the **anon** key into your `.env`.
+3. **Authentication → Sign In / Providers → Email**: turn **"Confirm email" off** for local practice,
+   otherwise a fresh signup cannot log in until it clicks a confirmation email. (In production you
+   leave this on — it is a real security feature.)
+
 ## The data in the database
 
 Task #4 below was created through the API, survived a full `docker compose down` and `up`, and is
@@ -125,6 +209,7 @@ $ docker compose exec db psql -U postgres -d tasks -c "\dt" -c "SELECT * FROM ta
 | File | What it does |
 |---|---|
 | `main.py` | FastAPI routes and validation — unchanged in shape since A1 |
+| `auth.py` | Supabase client and `current_user`, the reusable guard on protected routes |
 | `storage.py` | The one module that talks to Postgres; every query is parameterized (`%s`) |
 | `Dockerfile` | Builds the app image |
 | `compose.yaml` | Starts `api` + `db` together, with a volume and a database healthcheck |
