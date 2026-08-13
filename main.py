@@ -2,7 +2,9 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-from database import init_db, get_connection
+import repository
+from repository import init_db
+from database import get_connection  # A2 SQLite reads, swapped out in Stage 2
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
