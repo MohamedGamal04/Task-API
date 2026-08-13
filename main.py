@@ -2,7 +2,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-from database import init_db
+from database import init_db, get_connection
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
@@ -34,9 +34,16 @@ async def read_root():
 async def read_health():
     return { "status": "ok" }
 
+def row_to_task(row):
+    """Turn a database row into the same Task shape the API always returned."""
+    return Task(id=row["id"], title=row["title"], done=bool(row["done"]))
+
 @app.get("/tasks", summary="List all tasks")
 async def get_tasks():
-    return tasks
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM tasks").fetchall()
+    conn.close()
+    return [row_to_task(row) for row in rows]
 
 @app.post("/tasks", status_code=201, summary="Create a new task")
 async def create_task(task_in: TaskCreate):
@@ -51,13 +58,15 @@ async def create_task(task_in: TaskCreate):
 
 @app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
-    for task in tasks:
-        if task.id == id:
-            return task
-    return JSONResponse(
-        status_code=404,
-        content={"error": f"Task {id} not found"}
-    )
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
+    conn.close()
+    if row is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {id} not found"}
+        )
+    return row_to_task(row)
 
 
 @app.put("/tasks/{id}", summary="Update a specific task")
