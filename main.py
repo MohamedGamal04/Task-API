@@ -32,14 +32,12 @@ async def read_health():
 
 def row_to_task(row):
     """Turn a database row into the same Task shape the API always returned."""
-    return Task(id=row["id"], title=row["title"], done=bool(row["done"]))
+    id, title, done = row
+    return Task(id=id, title=title, done=bool(done))
 
 @app.get("/tasks", summary="List all tasks")
 async def get_tasks():
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM tasks").fetchall()
-    conn.close()
-    return [row_to_task(row) for row in rows]
+    return [row_to_task(row) for row in repository.list_tasks()]
 
 @app.post("/tasks", status_code=201, summary="Create a new task")
 async def create_task(task_in: TaskCreate):
@@ -60,9 +58,7 @@ async def create_task(task_in: TaskCreate):
 
 @app.get("/tasks/{id}", summary="Get a specific task")
 async def get_task(id: int):
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
-    conn.close()
+    row = repository.get_task(id)
     if row is None:
         return JSONResponse(
             status_code=404,
