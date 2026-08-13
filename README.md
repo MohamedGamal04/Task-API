@@ -50,8 +50,6 @@ content-type: application/json
 
 Full CRUD cycle tested via `/docs` — create, list, update, and delete a task, all through the "Try it out" interface.
 
-![Swagger UI screenshot](<img width="1450" height="585" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9029023f-b855-4a62-ae3a-502e2e81a06f" />)
-
 ## Notes
 
 - Data is stored in memory only — it resets whenever the server restarts. This is intentional for this stage; persistence with a database is coming in Week 3.
