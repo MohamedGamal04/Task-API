@@ -91,7 +91,7 @@ there is one source of truth.
 
 ### DB Browser screenshot
 
-![tasks.db open in DB Browser for SQLite](docs/db-browser.png)
+![tasks.db open in DB Browser for SQLite](docs/db-browser.jpg)
 
 ## Notes
 
