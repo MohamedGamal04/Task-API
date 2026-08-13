@@ -1,6 +1,6 @@
 import json
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -77,6 +77,26 @@ async def login(credentials: Credentials):
         "refresh_token": response.session.refresh_token,
         "token_type": "bearer",
     }
+
+# --- Public & protected routes (A4) ----------------------------------------
+
+@app.get("/public/info", tags=["public"], summary="Public info, no auth needed")
+async def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+@app.get("/protected/profile", tags=["protected"], summary="Private profile data")
+async def protected_profile(request: Request):
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Access token required"}
+        )
+    # Stage 3 replaces this with real verification against Supabase.
+    return {"message": "A token was presented", "token_received": True}
+
+# --- Tasks (A1-A3) ---------------------------------------------------------
 
 def row_to_task(row):
     """Turn a database row into the same Task shape the API always returned."""
