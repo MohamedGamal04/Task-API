@@ -1,45 +1,59 @@
-# Task API — FlyRank Backend Track W2 · A1 + W3 · A2
+# Task API — FlyRank Backend Track (A1 · A2 · A3)
 
 A small CRUD API for managing a to-do list, built with **Python** and **FastAPI**. Supports creating,
-reading, updating, and deleting tasks — now backed by a real **SQLite** database instead of an
-in-memory list, so the data survives a server restart. Includes interactive API docs via Swagger UI.
+reading, updating, and deleting tasks. The storage underneath has been swapped three times while the
+API on top stayed identical:
 
-The endpoints did not change between A1 and A2; only the storage layer did.
+| Assignment | Where tasks live | What runs it |
+|---|---|---|
+| A1 | a list in memory | your program |
+| A2 | a `tasks.db` file | your disk (SQLite) |
+| **A3 (current)** | **rows in Postgres** | **a container — a real database server** |
 
-## How to run it
+Identical endpoints and identical responses across all three: storage is just an implementation detail.
 
-**Requirements:** Python 3.10+
+## Run it — one command
 
-1. Install dependencies:
-   ```bash
-   pip install fastapi uvicorn
-   ```
+**Requirements:** Docker Desktop (or Podman).
 
-2. Start the server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+```bash
+cp .env.example .env
+docker compose up
+```
 
-3. The API is now running at `http://127.0.0.1:8000`. Interactive docs are available at `http://127.0.0.1:8000/docs`.
+That starts two containers: `api` (built from the `Dockerfile`) and `db` (the official `postgres`
+image with a named volume). The API is at <http://localhost:3000>, interactive docs at
+<http://localhost:3000/docs>. The `tasks` table is created automatically if missing and three example
+tasks are seeded **only when the table is empty** — restarts never duplicate them.
 
-That is the one command you need. `tasks.db` is created automatically on first run, the `tasks`
-table is created if missing, and three example tasks are seeded **only when the table is empty** —
-restarting never duplicates them.
+Data lives in the `taskdata` volume, so `docker compose down` then `up` keeps every row.
 
-## Postgres in Docker (W1 · A3, in progress)
+### Configuration
 
-Start a real Postgres server in one command — nothing installed on your machine:
+All config comes from the environment — see `.env.example` for the keys:
+
+| Variable | What it is |
+|---|---|
+| `DATABASE_URL` | Postgres connection string, e.g. `postgres://postgres:dev@db:5432/tasks` |
+
+`.env` is git-ignored and holds the real values; `.env.example` is the committed template.
+No credentials are hardcoded anywhere in the code.
+
+### Running the app outside Docker
+
+Start just the database, then run the app on your machine against it:
 
 ```bash
 docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks \
   -p 5432:5432 -v taskdata:/var/lib/postgresql -d postgres
+pip install -r requirements.txt
+uvicorn main:app --reload --port 3000     # DATABASE_URL points at localhost in .env
 ```
 
-Open a SQL prompt inside it: `docker exec -it taskdb psql -U postgres -d tasks`
+Open a SQL prompt inside the container: `docker exec -it taskdb psql -U postgres -d tasks`
 
-> The assignment mounts the volume at `/var/lib/postgresql/data`. The `postgres:18+`
-> images expect a single mount at `/var/lib/postgresql` instead, which is what the
-> command above uses.
+> The assignment mounts the volume at `/var/lib/postgresql/data`. The `postgres:18+` images expect a
+> single mount at `/var/lib/postgresql` instead, which is what the commands above use.
 
 ## Endpoints
 
@@ -53,64 +67,91 @@ Open a SQL prompt inside it: `docker exec -it taskdb psql -U postgres -d tasks`
 | PUT | `/tasks/{id}` | Update a specific task (title and/or done) | 200, 400 empty title, 404 unknown id |
 | DELETE | `/tasks/{id}` | Delete a specific task | 204, 404 unknown id |
 
+All error responses return JSON in the form `{"error": "..."}`.
+
 ## Example request
 
 ```bash
-curl -i -X POST http://127.0.0.1:8000/tasks -H "Content-Type: application/json" -d '{"title":"Buy milk"}'
+curl -i http://localhost:3000/tasks
+```
+
+```
+HTTP/1.1 200 OK
+date: Thu, 13 Aug 2026 18:38:14 GMT
+server: uvicorn
+content-length: 191
+content-type: application/json
+
+[{"id":1,"title":"Buy milk","done":false},{"id":2,"title":"Walk the dog","done":false},{"id":3,"title":"Finish assignment","done":false},{"id":4,"title":"Survives compose down","done":false}]
+```
+
+Creating a task:
+
+```bash
+curl -i -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Buy milk"}'
 ```
 
 ```
 HTTP/1.1 201 Created
-date: Thu, 13 Aug 2026 09:23:14 GMT
-server: uvicorn
-content-length: 40
 content-type: application/json
 
 {"id":4,"title":"Buy milk","done":false}
 ```
 
-Create a task, stop the server, start it again, then `GET /tasks` — the task is still there.
+## The data in the database
 
-## Swagger UI
+Task #4 below was created through the API, survived a full `docker compose down` and `up`, and is
+read straight out of Postgres:
 
-Full CRUD cycle tested via `/docs` — create, list, update, and delete a task, all through the
-"Try it out" interface.
+```
+$ docker compose exec db psql -U postgres -d tasks -c "\dt" -c "SELECT * FROM tasks;"
+          List of tables
+ Schema | Name  | Type  |  Owner
+--------+-------+-------+----------
+ public | tasks | table | postgres
+(1 row)
 
-## Why SQLite
+ id |         title         | done
+----+-----------------------+------
+  1 | Buy milk              | f
+  2 | Walk the dog          | f
+  3 | Finish assignment     | f
+  4 | Survives compose down | f
+(4 rows)
+```
 
-- **One file, zero setup** — no server to install or run; the whole database is `tasks.db`.
-- **Persistence** — tasks survive a restart, unlike the in-memory list of Assignment 1.
-- **Standard library** — Python ships with `sqlite3`, so there is no extra dependency.
+## How it is put together
 
-## Where the database lives
+| File | What it does |
+|---|---|
+| `main.py` | FastAPI routes and validation — unchanged in shape since A1 |
+| `repository.py` | The one module that talks to Postgres; every query is parameterized (`%s`) |
+| `Dockerfile` | Builds the app image |
+| `compose.yaml` | Starts `api` + `db` together, with a volume and a database healthcheck |
+| `database.py`, `sql_playground.py` | The A2 SQLite storage layer and its by-hand SQL, kept for reference |
 
-`tasks.db` in the project root, created automatically by `init_db()` in `database.py`.
-It is **git-ignored**, so a clean clone starts fresh: run the command above and `GET /tasks`
-returns the three seeded example tasks.
+## Previous assignment — A2 (SQLite)
 
-## SQL by hand (Stage 4)
+Why SQLite was chosen back then: one file, zero setup, no server to run — and it already gave
+persistence across restarts. `tasks.db` is created automatically by `init_db()` in `database.py` and
+is git-ignored so a clean clone starts fresh.
 
-Opened `tasks.db` in DB Browser for SQLite and ran queries directly against it. The same queries
-live in `sql_playground.py` (`python sql_playground.py`).
-
-Example query:
+SQL run by hand in DB Browser for SQLite (the same queries live in `sql_playground.py`):
 
 ```sql
 SELECT * FROM tasks WHERE done = 1;
 ```
 
 It returned only the completed rows — after `UPDATE tasks SET done = 1 WHERE id = 1;` the row
-`(1, 'Buy milk', 1)` appeared, and `GET /tasks` showed `"done": true` for that task immediately,
-with no server restart: the API and DB Browser read the exact same file. There is no syncing;
-there is one source of truth.
-
-### DB Browser screenshot
+`(1, 'Buy milk', 1)` appeared, and `GET /tasks` showed `"done": true` immediately, with no server
+restart: the API and DB Browser read the exact same file.
 
 ![tasks.db open in DB Browser for SQLite](docs/db-browser.jpg)
 
 ## Notes
 
-- Data now lives in `tasks.db` on disk — it survives server restarts.
-- All CRUD operations use SQL with **parameterized placeholders** (`?`); no user input is ever
-  glued into a SQL string.
-- All error responses (`400`, `404`) return a JSON body in the form `{"error": "..."}`.
+- Postgres runs in a container; nothing is installed on the host.
+- The database password comes from the environment, never from the source code.
+- All CRUD operations use **parameterized queries** (`%s` placeholders in psycopg); no user input is
+  ever glued into a SQL string.
+- Validation is unchanged from A1/A2: a missing or empty `title` is a `400`, an unknown id is a `404`.
