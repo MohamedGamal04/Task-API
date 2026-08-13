@@ -93,8 +93,26 @@ async def protected_profile(request: Request):
             status_code=401,
             content={"error": "Access token required"}
         )
-    # Stage 3 replaces this with real verification against Supabase.
-    return {"message": "A token was presented", "token_received": True}
+
+    # Ask Supabase whether the token is real. This is a network call, so the
+    # answer is trustworthy — a tampered or expired token fails here.
+    try:
+        response = supabase.auth.get_user(token)
+        user = response.user if response else None
+    except Exception:
+        user = None
+
+    if user is None:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Invalid or expired token"}
+        )
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "created_at": str(user.created_at),
+    }
 
 # --- Tasks (A1-A3) ---------------------------------------------------------
 
