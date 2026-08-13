@@ -2,6 +2,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+from database import init_db
 
 class TaskCreate(BaseModel):
     title: Optional[str] = None
@@ -22,6 +23,8 @@ tasks = [
 ]
 
 app = FastAPI()
+
+init_db()
 
 @app.get("/", summary="Get API information")
 async def read_root():
